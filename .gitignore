@@ -4,3 +4,8 @@ __pycache__/
 .venv/
 spark-warehouse/
 .DS_Store
+# dbt build artifacts (package-lock.yml IS committed)
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+logs/

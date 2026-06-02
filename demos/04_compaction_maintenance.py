@@ -17,10 +17,15 @@ def main():
     files_after = spark.sql(f"SELECT count(*) AS c FROM {t}.files").first()["c"]
     print(f"data files after compaction: {files_after}")
 
-    # Expire old snapshots to reclaim metadata/storage.
+    # Expire old snapshots to reclaim metadata/storage. now() can't be used directly as
+    # a CALL argument, so resolve a cutoff timestamp first and pass it as a literal.
+    cutoff = spark.sql(
+        "SELECT date_format(current_timestamp(), 'yyyy-MM-dd HH:mm:ss') AS t"
+    ).first()["t"]
     snaps_before = spark.sql(f"SELECT count(*) AS c FROM {t}.snapshots").first()["c"]
     spark.sql(
-        f"CALL demo.system.expire_snapshots(table => '{t}', older_than => now(), retain_last => 1)"
+        f"CALL demo.system.expire_snapshots("
+        f"table => '{t}', older_than => TIMESTAMP '{cutoff}', retain_last => 1)"
     )
     snaps_after = spark.sql(f"SELECT count(*) AS c FROM {t}.snapshots").first()["c"]
     print(f"snapshots: {snaps_before} -> {snaps_after}")

@@ -3,13 +3,18 @@
 Run INSIDE the spark-iceberg container (paths are container paths under /home/iceberg).
 """
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import days
 
 RAW = "/home/iceberg/data/raw"
 
 
 def main() -> None:
     spark = SparkSession.builder.appName("ingest_bronze").getOrCreate()
-    spark.sql("CREATE NAMESPACE IF NOT EXISTS demo.bronze")
+    # Pre-create every namespace the pipeline uses. silver/gold must exist before dbt's
+    # thrift session connects (it opens against its target schema); `default` backs the
+    # thrift connection's default database.
+    for ns in ("default", "bronze", "silver", "gold"):
+        spark.sql(f"CREATE NAMESPACE IF NOT EXISTS demo.{ns}")
 
     # MovieLens dimension/fact CSVs (append-only bronze, overwrite for idempotent reload)
     for name in ("movies", "ratings", "tags", "links"):
@@ -26,7 +31,7 @@ def main() -> None:
     (
         events.writeTo("demo.bronze.playback_events")
         .using("iceberg")
-        .partitionedBy("days(event_ts)")
+        .partitionedBy(days("event_ts"))
         .createOrReplace()
     )
     print(f"bronze.playback_events: {events.count()} rows")

@@ -46,7 +46,11 @@ def write_batch(
     out_dir = Path("data/raw/playback_events") / f"date={day.isoformat()}"
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "events.parquet"
-    pd.DataFrame(events).to_parquet(out, index=False)
+    # Spark's Parquet reader rejects nanosecond timestamps; pandas/pyarrow default to
+    # TIMESTAMP(NANOS). Coerce event_ts down to microseconds so Spark can read it.
+    pd.DataFrame(events).to_parquet(
+        out, index=False, coerce_timestamps="us", allow_truncated_timestamps=True
+    )
     return out
 
 

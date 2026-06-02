@@ -39,6 +39,7 @@ def build_suite() -> list[dict]:
 
 def _load_table():
     import pandas as pd
+
     from trino.dbapi import connect
 
     conn = connect(host="localhost", port=8085, user="ge", catalog="demo", schema="gold")
