@@ -18,28 +18,31 @@
 </div></nav>
 <main class="wrap">
   <section class="panel active" id="overview">
+    <div class="card" style="margin-bottom:1.5rem"><h2><i data-lucide="info"></i>What this is</h2>
+      <p style="color:var(--slate)">A working Apache Iceberg lakehouse that runs on a laptop. It loads the MovieLens dataset and a synthetic stream of playback events, moves them through bronze, silver, and gold layers with dbt, and serves the result through Trino. I built it to get hands-on with Iceberg, the open table format most modern data platforms are standardizing on, and to show what it buys you over a folder of Parquet files: reading a table as it looked last week, changing a schema without rewriting data, and partitioning you never have to manage by hand. Every number on this page came from one real run.</p>
+      <p class="note" style="margin-top:.8rem">The numbers below: how much data landed, how the layers stack up, and whether the quality gates passed.</p></div>
     <div class="grid kpis" id="kpis"></div>
     <div class="card"><h2><i data-lucide="bar-chart-3"></i>Top titles by unique viewers</h2>
-      <p class="note">From the gold <span class="mono">movie_engagement</span> mart — the most-watched titles in the synthetic playback stream.</p>
+      <p class="note">The most-watched titles in the gold <span class="mono">movie_engagement</span> mart. Viewer counts are small because the synthetic events spread thin across roughly 9,700 movies, so read the shape, not the magnitude.</p>
       <div class="chart-box"><canvas id="tt"></canvas></div></div>
   </section>
   <section class="panel" id="engagement"><div class="grid two">
     <div class="card"><h2><i data-lucide="activity"></i>Daily active users</h2>
-      <p class="note">From <span class="mono">daily_active_users</span>, over the 7 partitioned days.</p>
+      <p class="note">Distinct users active each day across the seven days of generated events, read straight from the <span class="mono">daily_active_users</span> mart.</p>
       <div class="chart-box"><canvas id="dau"></canvas></div></div>
-    <div class="card"><h2><i data-lucide="scatter-chart"></i>Completion rate vs avg rating</h2>
-      <p class="note">Each point is a title (gold mart).</p>
+    <div class="card"><h2><i data-lucide="scatter-chart"></i>Completion rate vs average rating</h2>
+      <p class="note">Each point is one title: how often viewers finish it against its average MovieLens rating. The interesting corner is high-rated titles that people still don't finish.</p>
       <div class="chart-box"><canvas id="eng"></canvas></div></div>
   </div></section>
-  <section class="panel" id="features"><div class="card"><h2><i data-lucide="snowflake"></i>Iceberg capabilities, from the demo runs</h2>
-    <p class="note">The five things a Hive/Parquet directory can't do, demonstrated against this dataset.</p>
+  <section class="panel" id="features"><div class="card"><h2><i data-lucide="snowflake"></i>What Iceberg does that a Parquet folder can't</h2>
+    <p class="note">Each row is a capability I ran against this dataset. These are the reasons to use a table format instead of dumping files in a directory.</p>
     <table id="featTbl"></table></div></section>
-  <section class="panel" id="lineage"><div class="card"><h2><i data-lucide="git-pull-request"></i>Pipeline lineage</h2>
+  <section class="panel" id="lineage"><div class="card"><h2><i data-lucide="git-pull-request"></i>How the data flows</h2>
     <div class="lin"><div class="node">Bronze<small>raw ingest</small></div><span class="arrow">→</span>
     <div class="node">Silver<small>dims + facts</small></div><span class="arrow">→</span>
     <div class="node accent">Gold<small>marts</small></div><span class="arrow">←</span>
     <div class="node">Trino<small>SQL</small></div></div>
-    <p class="note" style="margin-top:1rem">PySpark writes Iceberg tables on MinIO (S3) through a REST catalog; dbt-spark models bronze → silver → gold; Trino queries the same tables. dbt tests and Great Expectations gate the gold layer.</p>
+    <p class="note" style="margin-top:1rem">PySpark writes Iceberg tables to MinIO (S3) through a REST catalog. dbt builds the raw bronze tables into clean silver dimensions and facts, then into the gold marts the charts read from. Trino queries those same tables directly. The gold layer only counts as good once the dbt tests and the Great Expectations checks pass.</p>
   </div></section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
