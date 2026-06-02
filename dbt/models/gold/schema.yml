@@ -1,0 +1,27 @@
+version: 2
+models:
+  - name: movie_engagement
+    columns:
+      - name: movie_id
+        tests: [not_null, unique]
+      - name: completion_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 1
+      - name: avg_rating
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.5
+              max_value: 5.0
+              row_condition: "avg_rating is not null"
+  - name: daily_active_users
+    columns:
+      - name: activity_date
+        tests: [not_null, unique]
+      - name: active_users
+        tests: [not_null]
+  - name: top_titles
+    columns:
+      - name: movie_id
+        tests: [not_null, unique]

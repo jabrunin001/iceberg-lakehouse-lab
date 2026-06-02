@@ -1,0 +1,16 @@
+name: iceberg_lakehouse
+version: "1.0.0"
+config-version: 2
+profile: iceberg_lakehouse
+model-paths: ["models"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+models:
+  iceberg_lakehouse:
+    +file_format: iceberg
+    silver:
+      +schema: silver
+      +materialized: table
+    gold:
+      +schema: gold
+      +materialized: table

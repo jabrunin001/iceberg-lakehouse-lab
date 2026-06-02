@@ -1,0 +1,9 @@
+pyspark==3.5.1
+dbt-spark[PyHive]==1.8.0
+great-expectations==0.18.19
+trino==0.328.0
+requests==2.32.3
+pandas==2.2.2
+pyarrow==16.1.0
+pytest==8.2.2
+ruff==0.5.0

@@ -1,0 +1,70 @@
+services:
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+      MINIO_DOMAIN: minio
+    ports: ["9000:9000", "9001:9001"]
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      retries: 10
+
+  mc:
+    image: minio/mc:RELEASE.2024-06-12T14-34-03Z
+    container_name: mc
+    depends_on: { minio: { condition: service_started } }
+    entrypoint: >
+      /bin/sh -c "
+      until (mc alias set m http://minio:9000 admin password) do sleep 1; done;
+      mc mb --ignore-existing m/warehouse;
+      tail -f /dev/null
+      "
+
+  iceberg-rest:
+    image: tabulario/iceberg-rest:1.6.0
+    container_name: iceberg-rest
+    depends_on: [minio]
+    ports: ["8181:8181"]
+    environment:
+      CATALOG_WAREHOUSE: s3://warehouse/
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: password
+      AWS_REGION: us-east-1
+
+  spark-iceberg:
+    image: tabulario/spark-iceberg:3.5.1_1.6.0
+    container_name: spark-iceberg
+    depends_on: [iceberg-rest, minio]
+    environment:
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: password
+      AWS_REGION: us-east-1
+    volumes:
+      - ./docker/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+      - ./ingestion:/home/iceberg/ingestion
+      - ./dbt:/home/iceberg/dbt
+      - ./demos:/home/iceberg/demos
+      - ./data:/home/iceberg/data
+    ports: ["8888:8888", "10000:10000", "4040:4040"]
+    command: >
+      /bin/sh -c "
+      /opt/spark/sbin/start-thriftserver.sh
+        --hiveconf hive.server2.thrift.port=10000
+        --hiveconf hive.server2.thrift.bind.host=0.0.0.0;
+      tail -f /dev/null
+      "
+
+  trino:
+    image: trinodb/trino:451
+    container_name: trino
+    depends_on: [iceberg-rest, minio]
+    ports: ["8080:8080"]
+    volumes:
+      - ./docker/trino/catalog:/etc/trino/catalog

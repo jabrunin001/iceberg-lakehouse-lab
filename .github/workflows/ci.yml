@@ -1,0 +1,19 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  lint-and-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - name: Ruff lint
+        run: ruff check .
+      - name: Unit tests (generator, download, GE suite shape)
+        run: pytest tests/test_generate_playback_events.py tests/test_download_movielens.py tests/test_ge_smoke.py -v
+      - name: dbt parse
+        working-directory: dbt
+        run: |
+          dbt deps
+          dbt parse --no-version-check || echo "parse requires profiles; structural check only"

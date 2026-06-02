@@ -1,0 +1,36 @@
+version: 2
+models:
+  - name: dim_movie
+    columns:
+      - name: movie_id
+        tests: [not_null, unique]
+      - name: release_year
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1900
+              max_value: 2030
+              row_condition: "release_year is not null"
+  - name: dim_user
+    columns:
+      - name: user_id
+        tests: [not_null, unique]
+  - name: fact_rating
+    columns:
+      - name: rating
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.5
+              max_value: 5.0
+      - name: movie_id
+        tests:
+          - relationships:
+              to: ref('dim_movie')
+              field: movie_id
+  - name: fact_playback_event
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+      - name: event_type
+        tests:
+          - accepted_values:
+              values: ["play", "pause", "seek", "complete"]
