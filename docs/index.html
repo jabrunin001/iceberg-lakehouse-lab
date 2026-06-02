@@ -1,0 +1,48 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>iceberg-lakehouse-lab · dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css"></head><body>
+<header class="head"><div class="grad"></div><div class="wrap">
+  <h1>iceberg-lakehouse-lab</h1>
+  <p class="sub">A local Apache Iceberg lakehouse · bronze → silver → gold with dbt + Trino</p>
+  <div class="meta"><span>Snapshot of a real run · <span id="gen"></span></span>
+    <a href="https://github.com/jabrunin001/iceberg-lakehouse-lab" target="_blank" rel="noopener">View repo ↗</a></div>
+</div></header>
+<nav class="tabs"><div class="wrap" role="tablist">
+  <button class="tab active" data-tab="overview" role="tab" aria-selected="true"><i data-lucide="layout-grid"></i>Overview</button>
+  <button class="tab" data-tab="engagement" role="tab" aria-selected="false"><i data-lucide="bar-chart-3"></i>Engagement</button>
+  <button class="tab" data-tab="features" role="tab" aria-selected="false"><i data-lucide="snowflake"></i>Iceberg features</button>
+  <button class="tab" data-tab="lineage" role="tab" aria-selected="false"><i data-lucide="git-pull-request"></i>Lineage</button>
+</div></nav>
+<main class="wrap">
+  <section class="panel active" id="overview">
+    <div class="grid kpis" id="kpis"></div>
+    <div class="card"><h2><i data-lucide="bar-chart-3"></i>Top titles by unique viewers</h2>
+      <p class="note">From the gold <span class="mono">movie_engagement</span> mart — the most-watched titles in the synthetic playback stream.</p>
+      <div class="chart-box"><canvas id="tt"></canvas></div></div>
+  </section>
+  <section class="panel" id="engagement"><div class="grid two">
+    <div class="card"><h2><i data-lucide="activity"></i>Daily active users</h2>
+      <p class="note">From <span class="mono">daily_active_users</span>, over the 7 partitioned days.</p>
+      <div class="chart-box"><canvas id="dau"></canvas></div></div>
+    <div class="card"><h2><i data-lucide="scatter-chart"></i>Completion rate vs avg rating</h2>
+      <p class="note">Each point is a title (gold mart).</p>
+      <div class="chart-box"><canvas id="eng"></canvas></div></div>
+  </div></section>
+  <section class="panel" id="features"><div class="card"><h2><i data-lucide="snowflake"></i>Iceberg capabilities, from the demo runs</h2>
+    <p class="note">The five things a Hive/Parquet directory can't do, demonstrated against this dataset.</p>
+    <table id="featTbl"></table></div></section>
+  <section class="panel" id="lineage"><div class="card"><h2><i data-lucide="git-pull-request"></i>Pipeline lineage</h2>
+    <div class="lin"><div class="node">Bronze<small>raw ingest</small></div><span class="arrow">→</span>
+    <div class="node">Silver<small>dims + facts</small></div><span class="arrow">→</span>
+    <div class="node accent">Gold<small>marts</small></div><span class="arrow">←</span>
+    <div class="node">Trino<small>SQL</small></div></div>
+    <p class="note" style="margin-top:1rem">PySpark writes Iceberg tables on MinIO (S3) through a REST catalog; dbt-spark models bronze → silver → gold; Trino queries the same tables. dbt tests and Great Expectations gate the gold layer.</p>
+  </div></section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="data.js"></script><script src="charts.js"></script><script src="app.js"></script>
+</body></html>
