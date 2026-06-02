@@ -39,7 +39,7 @@ services:
       AWS_REGION: us-east-1
 
   spark-iceberg:
-    image: tabulario/spark-iceberg:3.5.1_1.6.0
+    image: tabulario/spark-iceberg:3.5.5_1.8.1
     container_name: spark-iceberg
     depends_on: [iceberg-rest, minio]
     environment:
@@ -53,18 +53,11 @@ services:
       - ./demos:/home/iceberg/demos
       - ./data:/home/iceberg/data
     ports: ["8888:8888", "10000:10000", "4040:4040"]
-    command: >
-      /bin/sh -c "
-      /opt/spark/sbin/start-thriftserver.sh
-        --hiveconf hive.server2.thrift.port=10000
-        --hiveconf hive.server2.thrift.bind.host=0.0.0.0;
-      tail -f /dev/null
-      "
 
   trino:
     image: trinodb/trino:451
     container_name: trino
     depends_on: [iceberg-rest, minio]
-    ports: ["8080:8080"]
+    ports: ["8085:8080"]
     volumes:
       - ./docker/trino/catalog:/etc/trino/catalog

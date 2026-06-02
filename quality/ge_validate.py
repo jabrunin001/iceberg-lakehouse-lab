@@ -41,7 +41,7 @@ def _load_table():
     import pandas as pd
     from trino.dbapi import connect
 
-    conn = connect(host="localhost", port=8080, user="ge", catalog="demo", schema="gold")
+    conn = connect(host="localhost", port=8085, user="ge", catalog="demo", schema="gold")
     return pd.read_sql("SELECT * FROM demo.gold.movie_engagement", conn)
 
 

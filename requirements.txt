@@ -1,4 +1,4 @@
-pyspark==3.5.1
+pyspark==3.5.5
 dbt-spark[PyHive]==1.8.0
 great-expectations==0.18.19
 trino==0.328.0
