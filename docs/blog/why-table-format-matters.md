@@ -2,7 +2,7 @@
 
 > **Draft outline — fill prose from the actual output of `demos/01`–`05` after running them.**
 
-## 1. The hook: a data lake is a swamp without a table format
+## 1. A data lake is a swamp without a table format
 
 Most "data lakes" start as a directory of Parquet files in object storage. It works
 until you need to: change a column, delete a few rows for a GDPR request, see what the
@@ -31,7 +31,7 @@ while the data stays open Parquet anyone can read. _(See `demos/05_iceberg_vs_pa
 
 This lab deliberately separates **storage** (MinIO/S3), **catalog** (Iceberg REST), and
 **compute** (Spark for writes, Trino for reads). That separation is the core lakehouse
-idea — and Iceberg is the open table format Netflix co-created to make it work at scale.
+idea.
 
 ## 5. Try it yourself
 
