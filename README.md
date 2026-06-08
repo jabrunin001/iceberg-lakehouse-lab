@@ -6,7 +6,7 @@ A local, fully-Dockerized **Apache Iceberg lakehouse**. It ingests the real Movi
 dataset plus a synthetic playback-events stream into Iceberg, transforms it through
 bronze → silver → gold with **dbt-spark**, validates it with **dbt tests + Great
 Expectations**, and serves it through **Trino** — all on object storage (MinIO/S3), the
-way modern data platforms (including the one Iceberg was born at, Netflix) actually run.
+way modern data platforms actually run.
 
 ## Architecture
 
