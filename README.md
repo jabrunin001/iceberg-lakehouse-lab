@@ -8,6 +8,10 @@ bronze → silver → gold with **dbt-spark**, validates it with **dbt tests + G
 Expectations**, and serves it through **Trino** — all on object storage (MinIO/S3), the
 way modern data platforms actually run.
 
+**Live demo:** https://jabrunin001.github.io/iceberg-lakehouse-lab/ — scrub through
+a live Iceberg snapshot history, time-travel the table to any past version, and roll
+HEAD back in one click.
+
 ## Architecture
 
 ```mermaid
