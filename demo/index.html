@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Iceberg Lakehouse Lab — field notes</title>
+<meta name="description" content="A local Apache Iceberg lakehouse: MovieLens plus synthetic playback events through bronze, silver, and gold with dbt-spark, validated and queried via Trino. Demonstrates time-travel, schema and partition evolution, and compaction." />
+<meta name="color-scheme" content="light" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#f7f3ea;        /* warm cream */
+    --paper-2:#fffdf8;      /* card */
+    --paper-3:#f1ebdc;      /* sunken */
+    --ink:#21201b;          /* primary ~14:1 */
+    --ink-2:#5b5347;        /* secondary ~6:1 */
+    --ink-3:#8a8070;        /* faint label */
+    --rule:#e2dac9;         /* hairline */
+    --rule-2:#cdc1aa;       /* stronger rule */
+    --teal:#0e6e78;         /* iceberg accent */
+    --teal-deep:#0a525a;
+    --teal-soft:#e1eeee;
+    --amber:#8a5a12;
+    --plum:#6c4a77;
+    --red:#a23b2e;
+    --serif:"Source Serif 4", Georgia, "Times New Roman", serif;
+    --disp:"Playfair Display", Georgia, serif;
+    --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+    --ring:rgba(14,110,120,.5);
+    --maxw:1080px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--serif); font-size:18px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(33,32,27,.028) 1px, transparent 0);
+    background-size:5px 5px;
+  }
+  h1,h2,h3,h4{margin:0; font-family:var(--disp); font-weight:700; line-height:1.12; letter-spacing:-.01em}
+  p{margin:0}
+  a{color:inherit; text-decoration:none}
+  .mono{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:.86em}
+  .sc{font-variant:small-caps; letter-spacing:.06em}
+  :focus-visible{outline:2px solid var(--ring); outline-offset:3px}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 28px}
+  .rule{height:1px; background:var(--rule-2); border:0; margin:0}
+
+  /* masthead */
+  header.mast{border-bottom:2px solid var(--ink); background:var(--paper)}
+  .mast-in{display:flex; align-items:center; gap:24px; padding:16px 0; max-width:var(--maxw); margin:0 auto; padding-left:28px; padding-right:28px}
+  .logo{display:flex; align-items:center; gap:11px}
+  .logo svg{width:30px; height:30px}
+  .logo .lt{font-family:var(--disp); font-weight:800; font-size:21px; letter-spacing:-.01em}
+  .mast-nav{margin-left:auto; display:flex; align-items:center; gap:26px}
+  .mast-nav a{font-family:var(--mono); font-size:12.5px; color:var(--ink-2); text-transform:uppercase; letter-spacing:.05em; transition:color .15s}
+  .mast-nav a:hover{color:var(--teal-deep)}
+  .gh{display:inline-flex; align-items:center; gap:7px; color:var(--ink)}
+  @media (max-width:820px){ .mast-nav a.hideable{display:none} }
+
+  /* sub-masthead meta line */
+  .subline{border-bottom:1px solid var(--rule-2); background:var(--paper)}
+  .subline-in{max-width:var(--maxw); margin:0 auto; padding:8px 28px; display:flex; gap:20px; flex-wrap:wrap; font-family:var(--mono); font-size:11.5px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.05em}
+  .subline-in span b{color:var(--ink-2); font-weight:500}
+
+  /* hero */
+  .hero{padding:56px 0 26px}
+  .eyebrow{font-family:var(--mono); font-size:12px; text-transform:uppercase; letter-spacing:.16em; color:var(--teal-deep)}
+  .hero h1{font-size:clamp(40px,6.4vw,76px); margin-top:18px; letter-spacing:-.02em; max-width:16ch}
+  .hero h1 em{font-style:italic; color:var(--teal-deep)}
+  .dek{font-size:clamp(19px,2.2vw,23px); color:var(--ink-2); margin-top:22px; max-width:62ch; font-weight:400}
+  .hero-grid{display:grid; grid-template-columns:1.5fr 1fr; gap:44px; margin-top:40px; align-items:start}
+  @media (max-width:840px){ .hero-grid{grid-template-columns:1fr; gap:30px} }
+  .abstract{font-size:18px; color:var(--ink); line-height:1.72}
+  .abstract::first-letter{font-family:var(--disp); font-weight:800; float:left; font-size:64px; line-height:.78; padding:6px 12px 0 0; color:var(--teal-deep)}
+  .abstract p + p{margin-top:16px}
+  .facts{border-top:2px solid var(--ink); border-bottom:2px solid var(--ink); padding:6px 0}
+  .fact{display:flex; justify-content:space-between; align-items:baseline; gap:14px; padding:11px 0; border-bottom:1px solid var(--rule)}
+  .fact:last-child{border-bottom:0}
+  .fact .fl{font-family:var(--mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3)}
+  .fact .fv{font-family:var(--disp); font-weight:700; font-size:22px}
+  .fact .fv.teal{color:var(--teal-deep)}
+  .hero-cta{display:flex; gap:14px; margin-top:26px; flex-wrap:wrap}
+
+  .btn{display:inline-flex; align-items:center; gap:9px; cursor:pointer; font-family:var(--mono); font-size:13px; text-transform:uppercase; letter-spacing:.04em; padding:12px 20px; border-radius:3px; border:1.5px solid var(--ink); transition:background .15s, color .15s, transform .1s; min-height:44px; background:transparent; color:var(--ink)}
+  .btn:active{transform:translateY(1px)}
+  .btn-fill{background:var(--ink); color:var(--paper)}
+  .btn-fill:hover{background:var(--teal-deep); border-color:var(--teal-deep)}
+  .btn-out:hover{background:var(--paper-2)}
+  .btn-teal{background:var(--teal-deep); color:#fff; border-color:var(--teal-deep)}
+  .btn-teal:hover{background:var(--teal)}
+
+  /* sections */
+  section.band{padding:54px 0}
+  .secnum{display:flex; align-items:baseline; gap:16px; border-bottom:2px solid var(--ink); padding-bottom:14px; margin-bottom:30px}
+  .secnum .no{font-family:var(--mono); font-size:14px; color:var(--teal-deep); font-weight:600}
+  .secnum h2{font-size:clamp(26px,3.4vw,38px)}
+  .secnum .lead{margin-left:auto; font-family:var(--mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); align-self:center}
+  .intro{font-size:19px; color:var(--ink-2); max-width:68ch; margin-bottom:30px; line-height:1.7}
+
+  /* §architecture - three columns */
+  .cols3{display:grid; grid-template-columns:repeat(3,1fr); gap:0; border:1.5px solid var(--ink)}
+  @media (max-width:760px){ .cols3{grid-template-columns:1fr} }
+  .col{padding:26px 22px; border-right:1px solid var(--rule-2)}
+  .col:last-child{border-right:0}
+  @media (max-width:760px){ .col{border-right:0; border-bottom:1px solid var(--rule-2)} .col:last-child{border-bottom:0} }
+  .col .ci{width:38px; height:38px; color:var(--teal-deep)}
+  .col h3{font-size:21px; margin:14px 0 4px}
+  .col .role{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3)}
+  .col p{font-size:16px; color:var(--ink-2); margin-top:12px; line-height:1.65}
+  .col .tech{margin-top:14px; font-family:var(--mono); font-size:12.5px; color:var(--teal-deep)}
+
+  /* §time travel - interactive */
+  .tt{display:grid; grid-template-columns:300px 1fr; gap:0; border:1.5px solid var(--ink); background:var(--paper-2)}
+  @media (max-width:880px){ .tt{grid-template-columns:1fr} }
+  .tt-rail{border-right:1.5px solid var(--ink); padding:18px 0}
+  @media (max-width:880px){ .tt-rail{border-right:0; border-bottom:1.5px solid var(--ink)} }
+  .rail-head{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); padding:0 20px 12px}
+  .snap{display:flex; gap:13px; padding:12px 20px; cursor:pointer; position:relative; border:0; background:transparent; width:100%; text-align:left; font-family:var(--serif); transition:background .12s}
+  .snap:hover{background:var(--paper-3)}
+  .snap[aria-current="true"]{background:var(--teal-soft)}
+  .snap .marker{position:relative; flex:0 0 auto; width:14px; display:flex; flex-direction:column; align-items:center}
+  .snap .marker .ln{position:absolute; top:18px; bottom:-12px; width:2px; background:var(--rule-2)}
+  .snap:last-child .marker .ln{display:none}
+  .snap .dot{width:13px; height:13px; border-radius:50%; border:2px solid var(--rule-2); background:var(--paper-2); z-index:1; margin-top:4px}
+  .snap[aria-current="true"] .dot{border-color:var(--teal-deep); background:var(--teal-deep)}
+  .snap.is-head .dot{box-shadow:0 0 0 3px var(--paper-2), 0 0 0 5px var(--teal-deep)}
+  .snap .sx{flex:1; min-width:0}
+  .snap .op{font-family:var(--mono); font-size:11.5px; font-weight:600; letter-spacing:.03em; color:var(--ink)}
+  .snap .op .tag{display:inline-block; font-size:9.5px; padding:1px 5px; border-radius:3px; margin-left:6px; vertical-align:middle; text-transform:uppercase; letter-spacing:.04em}
+  .tag.append{background:var(--teal-soft); color:var(--teal-deep)}
+  .tag.overwrite{background:#f0e6d2; color:var(--amber)}
+  .tag.schema{background:#ece3f0; color:var(--plum)}
+  .tag.compact{background:#e7e2d6; color:var(--ink-2)}
+  .snap .sid{font-family:var(--mono); font-size:10.5px; color:var(--ink-3); margin-top:2px}
+  .snap .headflag{font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:var(--teal-deep); margin-top:3px}
+
+  .tt-state{padding:22px 24px}
+  .asof{display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-family:var(--mono); font-size:12px; padding:9px 13px; border-radius:3px; background:var(--paper-3); border:1px solid var(--rule-2); color:var(--ink-2)}
+  .asof.travel{background:var(--teal-soft); border-color:var(--teal); color:var(--teal-deep)}
+  .asof .ai{width:15px; height:15px; flex:0 0 auto}
+  .state-stats{display:grid; grid-template-columns:repeat(3,1fr); gap:0; border:1px solid var(--rule-2); margin:18px 0; background:var(--paper)}
+  .ss{padding:14px 16px; border-right:1px solid var(--rule)}
+  .ss:last-child{border-right:0}
+  .ss .sl{font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3)}
+  .ss .sv{font-family:var(--disp); font-weight:700; font-size:27px; margin-top:5px; transition:color .2s}
+  .ss .sv .d{font-size:13px; font-family:var(--mono); color:var(--ink-3); font-weight:400}
+  .ss .sv.flash{color:var(--teal-deep)}
+  .note{font-size:15.5px; color:var(--ink-2); font-style:italic; margin-bottom:16px; min-height:46px}
+  .prev-cap{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); margin-bottom:7px}
+  .prev{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12.5px; background:var(--paper)}
+  .prev th{ text-align:left; font-weight:600; color:var(--ink-2); border-bottom:1.5px solid var(--ink); padding:7px 10px; white-space:nowrap}
+  .prev td{padding:6px 10px; border-bottom:1px solid var(--rule); color:var(--ink); font-variant-numeric:tabular-nums}
+  .prev th.new, .prev td.new{background:var(--teal-soft)}
+  .prev td.t{font-family:var(--serif); font-size:13.5px}
+  .tt-ctl{display:flex; align-items:center; gap:14px; margin-top:18px; flex-wrap:wrap}
+  .tt-ctl .hint{font-size:14px; color:var(--ink-3); font-style:italic}
+
+  /* §medallion */
+  .med{display:grid; grid-template-columns:repeat(3,1fr); gap:18px}
+  @media (max-width:760px){ .med{grid-template-columns:1fr} }
+  .layer{border:1.5px solid var(--ink); background:var(--paper-2); padding:22px}
+  .layer .lh{display:flex; align-items:baseline; justify-content:space-between; border-bottom:1px solid var(--rule-2); padding-bottom:10px}
+  .layer .lh .nm{font-family:var(--disp); font-weight:700; font-size:22px}
+  .layer .lh .tg{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--teal-deep)}
+  .layer p{font-size:15.5px; color:var(--ink-2); margin-top:12px; line-height:1.62}
+  .layer .tbls{margin-top:14px; font-family:var(--mono); font-size:12px; color:var(--ink); display:flex; flex-direction:column; gap:4px}
+  .layer .tbls span::before{content:"▸ "; color:var(--teal-deep)}
+
+  /* §quality - ledger */
+  .ledger{border:1.5px solid var(--ink); background:var(--paper-2)}
+  .lrow{display:flex; align-items:center; gap:14px; padding:13px 20px; border-bottom:1px solid var(--rule); font-family:var(--mono); font-size:13.5px}
+  .lrow:last-child{border-bottom:0}
+  .lrow .ck{width:20px; height:20px; flex:0 0 auto; color:var(--teal-deep)}
+  .lrow .desc{color:var(--ink)}
+  .lrow .src{margin-left:auto; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-3)}
+  .lrow .pass{color:var(--teal-deep); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.04em}
+
+  /* §feature index */
+  .index{border-top:2px solid var(--ink)}
+  .ixrow{display:grid; grid-template-columns:50px 1fr; gap:20px; padding:20px 0; border-bottom:1px solid var(--rule-2); align-items:start}
+  .ixrow .ixn{font-family:var(--mono); font-size:13px; color:var(--teal-deep); font-weight:600; padding-top:5px}
+  .ixrow h3{font-size:23px}
+  .ixrow .demo{font-family:var(--mono); font-size:11.5px; color:var(--ink-3); margin-top:4px}
+  .ixrow p{font-size:16px; color:var(--ink-2); margin-top:9px; max-width:70ch; line-height:1.6}
+
+  /* §query - paper terminal */
+  .listing{border:1.5px solid var(--ink); background:var(--paper-2); font-family:var(--mono); font-size:13px}
+  .listing-h{display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1.5px solid var(--ink); color:var(--ink-3); font-size:11.5px; text-transform:uppercase; letter-spacing:.05em}
+  .listing-b{padding:18px; overflow-x:auto; line-height:1.75}
+  .listing-b .pmt{color:var(--teal-deep); font-weight:600}
+  .listing-b .kw{color:var(--plum); font-weight:600} .listing-b .fn{color:var(--teal-deep)} .listing-b .st{color:var(--amber)}
+  .listing-b .cm{color:var(--ink-3); font-style:italic}
+  .listing-b .hr{color:var(--rule-2)}
+  .engines{display:flex; gap:12px; flex-wrap:wrap; margin-top:18px}
+  .engines .e{font-family:var(--mono); font-size:12.5px; border:1px solid var(--rule-2); background:var(--paper-2); padding:8px 14px; border-radius:3px; color:var(--ink-2)}
+  .engines .e b{color:var(--ink)}
+
+  /* colophon / cta */
+  .colophon{border-top:2px solid var(--ink); margin-top:50px; padding:46px 0 60px}
+  .colophon h2{font-size:clamp(26px,3.2vw,40px); max-width:18ch}
+  .colophon .ctext{font-size:18px; color:var(--ink-2); margin-top:16px; max-width:58ch; line-height:1.65}
+  .runbox{border:1.5px solid var(--ink); background:var(--paper-2); margin-top:24px; font-family:var(--mono); font-size:13px}
+  .runbox .rl{padding:9px 16px; border-bottom:1px solid var(--rule); color:var(--ink)}
+  .runbox .rl:last-child{border-bottom:0}
+  .runbox .rl .pmt{color:var(--teal-deep)}
+  .runbox .rl .cm{color:var(--ink-3); float:right; font-style:italic}
+  .colo-cta{display:flex; gap:14px; margin-top:26px; flex-wrap:wrap}
+  .foot{display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-top:42px; padding-top:20px; border-top:1px solid var(--rule-2); font-family:var(--mono); font-size:12px; color:var(--ink-3)}
+  .foot .note{margin-left:auto; max-width:48ch; text-align:right; font-family:var(--serif); font-style:italic; font-size:14px}
+  @media (max-width:680px){ .foot .note{text-align:left; margin-left:0} }
+
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important; scroll-behavior:auto !important}
+  }
+</style>
+</head>
+<body>
+
+<!-- MASTHEAD -->
+<header class="mast">
+  <div class="mast-in">
+    <a class="logo" href="#top" aria-label="Iceberg Lakehouse Lab home">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path d="M16 3l11 7-11 4L5 10l11-7z" fill="#0e6e78"/>
+        <path d="M5 10l11 4v15L5 23V10z" fill="#0a525a"/>
+        <path d="M27 10l-11 4v15l11-6V10z" fill="#11808d"/>
+      </svg>
+      <span class="lt">Iceberg Lakehouse Lab</span>
+    </a>
+    <nav class="mast-nav" aria-label="Primary">
+      <a class="hideable" href="#arch">Architecture</a>
+      <a href="#travel">Time travel</a>
+      <a class="hideable" href="#medallion">Medallion</a>
+      <a class="hideable" href="#features">Features</a>
+      <a class="gh" href="https://github.com/jabrunin001/iceberg-lakehouse-lab" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 00-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.17.08 1.78 1.2 1.78 1.2 1.03 1.77 2.7 1.26 3.36.97.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.05.78 2.12v3.14c0 .31.21.67.8.56A11.5 11.5 0 0012 .5z"/></svg>
+        Source
+      </a>
+    </nav>
+  </div>
+</header>
+<div class="subline">
+  <div class="subline-in">
+    <span><b>Apache Iceberg</b> · REST catalog</span>
+    <span><b>dbt-spark</b> transforms</span>
+    <span><b>Trino</b> query engine</span>
+    <span><b>MinIO</b> S3 storage</span>
+    <span>fully dockerized · runs on a laptop</span>
+  </div>
+</div>
+
+<main id="top">
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Field notes · a working lakehouse</div>
+    <h1>The table format that remembers <em>every version</em> of your data.</h1>
+    <p class="dek">A local Apache Iceberg lakehouse. It ingests the real MovieLens dataset and a synthetic playback-events stream, refines it bronze → silver → gold with dbt-spark, validates every model, and serves it through Trino — storage, catalog, and compute kept as separate, swappable layers.</p>
+
+    <div class="hero-grid">
+      <div class="abstract">
+        <p>Most warehouses give you one answer: the current one. Iceberg keeps a full history of snapshots, so you can query the table as it stood last Tuesday, roll a bad load back in seconds, and evolve a schema or partition layout without rewriting a single file.</p>
+        <p>This lab is a small, honest version of how modern platforms actually run that — on object storage, with two engines reading one set of tables. Scroll to §02 to time-travel through a live snapshot history yourself.</p>
+      </div>
+      <aside class="facts" aria-label="Lab at a glance">
+        <div class="fact"><span class="fl">Dataset</span><span class="fv">MovieLens</span></div>
+        <div class="fact"><span class="fl">Layers</span><span class="fv teal">bronze · silver · gold</span></div>
+        <div class="fact"><span class="fl">Iceberg demos</span><span class="fv">5</span></div>
+        <div class="fact"><span class="fl">Query engines</span><span class="fv">Spark + Trino</span></div>
+      </aside>
+    </div>
+
+    <div class="hero-cta">
+      <a class="btn btn-teal" href="#travel">Time-travel the table</a>
+      <a class="btn btn-out" href="#features">Read the feature index</a>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- §01 ARCHITECTURE -->
+<section class="band" id="arch">
+  <div class="wrap">
+    <div class="secnum"><span class="no">§01</span><h2>Separation of concerns</h2><span class="lead">storage · catalog · compute</span></div>
+    <p class="intro">A lakehouse is not one system. It is three independent layers that agree on a contract. Swap any one of them without re-copying your data — that is the leverage on both cost and vendor lock-in.</p>
+    <div class="cols3">
+      <div class="col">
+        <svg class="ci" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <div class="role">Storage</div>
+        <h3>MinIO (S3)</h3>
+        <p>Open object storage you control. Parquet data files and Iceberg metadata live here as plain objects — no engine owns them.</p>
+        <div class="tech">s3://warehouse/</div>
+      </div>
+      <div class="col">
+        <svg class="ci" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16v4H4zM4 14h16v4H4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="7.5" cy="8" r="1" fill="currentColor"/><circle cx="7.5" cy="16" r="1" fill="currentColor"/></svg>
+        <div class="role">Catalog</div>
+        <h3>Iceberg REST</h3>
+        <p>The source of truth for which snapshot is current. Tracks tables, schemas, and the snapshot tree that makes time-travel and rollback possible.</p>
+        <div class="tech">catalog: demo</div>
+      </div>
+      <div class="col">
+        <svg class="ci" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <div class="role">Compute</div>
+        <h3>Spark + Trino</h3>
+        <p>Spark (with dbt) writes and transforms; Trino reads. Two engines, one set of tables, the same numbers — proof the format is the contract.</p>
+        <div class="tech">writes · reads</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- §02 TIME TRAVEL (interactive) -->
+<section class="band" id="travel">
+  <div class="wrap">
+    <div class="secnum"><span class="no">§02</span><h2>Time travel</h2><span class="lead">demos/01_time_travel.py</span></div>
+    <p class="intro">Every write to <span class="mono">gold.movie_engagement</span> creates a snapshot. Select one to read the table exactly as it stood then — without restoring a backup. Then roll the live table (HEAD) back to it. This is the demo's signature trick, and it is one metadata pointer, not a copy.</p>
+
+    <div class="tt">
+      <div class="tt-rail">
+        <div class="rail-head">Snapshot history — newest first</div>
+        <div id="rail"></div>
+      </div>
+      <div class="tt-state">
+        <div class="asof" id="asof"><svg class="ai" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span id="asof-txt">Viewing HEAD — the current table</span></div>
+
+        <div class="state-stats">
+          <div class="ss"><div class="sl">Rows</div><div class="sv mono" id="st-rows">0</div></div>
+          <div class="ss"><div class="sl">Schema</div><div class="sv mono" id="st-schema">v1 <span class="d">/ 4 cols</span></div></div>
+          <div class="ss"><div class="sl">Data files</div><div class="sv mono" id="st-files">0</div></div>
+        </div>
+
+        <p class="note" id="st-note"></p>
+
+        <div class="prev-cap" id="prev-cap">preview · gold.movie_engagement</div>
+        <table class="prev" id="prev">
+          <thead id="prev-head"></thead>
+          <tbody id="prev-body"></tbody>
+        </table>
+
+        <div class="tt-ctl">
+          <button class="btn btn-teal" id="rollback">Roll back HEAD to this snapshot</button>
+          <button class="btn btn-out" id="latest">Jump to latest</button>
+          <span class="hint" id="ctl-hint">Reading the live table.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- §03 MEDALLION -->
+<section class="band" id="medallion">
+  <div class="wrap">
+    <div class="secnum"><span class="no">§03</span><h2>Medallion modeling with dbt</h2><span class="lead">dbt-spark</span></div>
+    <p class="intro">Raw data lands first, then gets conformed, then becomes the business marts analysts query. Each layer is a set of dbt models, tested on every run.</p>
+    <div class="med">
+      <div class="layer">
+        <div class="lh"><span class="nm">Bronze</span><span class="tg">raw</span></div>
+        <p>MovieLens CSVs and the synthetic playback-events stream, ingested by PySpark exactly as they arrived. Append-only, nothing reshaped.</p>
+        <div class="tbls"><span>bronze.movies</span><span>bronze.ratings</span><span>bronze.playback_events</span></div>
+      </div>
+      <div class="layer">
+        <div class="lh"><span class="nm">Silver</span><span class="tg">conformed</span></div>
+        <p>Deduplicated, typed, conformed dimensions and facts. The clean grain everything downstream is allowed to depend on.</p>
+        <div class="tbls"><span>silver.dim_movie</span><span>silver.fact_rating</span><span>silver.fact_playback</span></div>
+      </div>
+      <div class="layer">
+        <div class="lh"><span class="nm">Gold</span><span class="tg">marts</span></div>
+        <p>Business-ready answers: engagement per title, the day's top titles, daily active users. Idempotent builds, queryable in Trino.</p>
+        <div class="tbls"><span>gold.movie_engagement</span><span>gold.top_titles</span><span>gold.daily_active_users</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- §04 DATA QUALITY -->
+<section class="band" id="quality">
+  <div class="wrap">
+    <div class="secnum"><span class="no">§04</span><h2>The validation ledger</h2><span class="lead">dbt tests · Great Expectations</span></div>
+    <p class="intro">Numbers nobody trusts get re-argued in every meeting. Two layers of checks run on each build — dbt tests and dbt-expectations across every model, plus a focused Great Expectations suite on the critical gold table.</p>
+    <div class="ledger">
+      <div class="lrow"><svg class="ck" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e1eeee"/><path d="M8 12l2.5 2.5L16 9" stroke="#0a525a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="desc">movie_id is unique and not null in silver.dim_movie</span><span class="src">dbt · unique, not_null</span></div>
+      <div class="lrow"><svg class="ck" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e1eeee"/><path d="M8 12l2.5 2.5L16 9" stroke="#0a525a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="desc">fact_playback.movie_id is a valid relationship to dim_movie</span><span class="src">dbt · relationships</span></div>
+      <div class="lrow"><svg class="ck" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e1eeee"/><path d="M8 12l2.5 2.5L16 9" stroke="#0a525a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="desc">rating values fall within the expected 0.5–5.0 range</span><span class="src">dbt-expectations</span></div>
+      <div class="lrow"><svg class="ck" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e1eeee"/><path d="M8 12l2.5 2.5L16 9" stroke="#0a525a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="desc">completion_rate is between 0 and 1 in gold.movie_engagement</span><span class="src">Great Expectations</span></div>
+      <div class="lrow"><svg class="ck" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e1eeee"/><path d="M8 12l2.5 2.5L16 9" stroke="#0a525a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="desc">gold row count is non-zero after every build</span><span class="src">Great Expectations</span></div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- §05 FEATURE INDEX -->
+<section class="band" id="features">
+  <div class="wrap">
+    <div class="secnum"><span class="no">§05</span><h2>Iceberg feature index</h2><span class="lead">demos/</span></div>
+    <div class="index">
+      <div class="ixrow"><div class="ixn">01</div><div><h3>Time travel &amp; rollback</h3><div class="demo">demos/01_time_travel.py</div><p>Query any past snapshot by id or timestamp, and restore a previous snapshot as the current table in one operation — a recovery that copies nothing.</p></div></div>
+      <div class="ixrow"><div class="ixn">02</div><div><h3>Schema evolution</h3><div class="demo">demos/02_schema_evolution.py</div><p>Add, rename, reorder, or drop columns by metadata alone. Old data files stay exactly where they are; readers see the new schema correctly.</p></div></div>
+      <div class="ixrow"><div class="ixn">03</div><div><h3>Hidden partitioning</h3><div class="demo">demos/03_hidden_partitioning.py</div><p>Partition by a transform of a column (day of a timestamp) without a separate partition column. Queries prune the right files without users knowing the layout.</p></div></div>
+      <div class="ixrow"><div class="ixn">04</div><div><h3>Compaction &amp; maintenance</h3><div class="demo">demos/04_compaction_maintenance.py</div><p>Rewrite many small files into few large ones and expire old snapshots — faster scans and a smaller bill, with the table's data unchanged.</p></div></div>
+      <div class="ixrow"><div class="ixn">05</div><div><h3>Iceberg vs. plain Parquet</h3><div class="demo">demos/05_iceberg_vs_parquet.py</div><p>The same data, side by side, with and without the table format — so the cost of atomic commits, snapshots, and pruning is measured, not asserted.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- §06 QUERY -->
+<section class="band" id="query">
+  <div class="wrap">
+    <div class="secnum"><span class="no">§06</span><h2>Two engines, one table</h2><span class="lead">Trino</span></div>
+    <p class="intro">Spark writes the tables; Trino reads the very same files through the same catalog. Note the <span class="mono">FOR VERSION AS OF</span> clause — time-travel is first-class SQL.</p>
+    <div class="listing">
+      <div class="listing-h">trino:gold — query at a past snapshot</div>
+      <div class="listing-b"><span class="pmt">trino&gt;</span> <span class="kw">SELECT</span> title, plays, <span class="fn">round</span>(completion_rate, 2) <span class="kw">AS</span> compl
+       <span class="kw">FROM</span> gold.movie_engagement <span class="kw">FOR VERSION AS OF</span> <span class="st">5</span>
+       <span class="kw">ORDER BY</span> plays <span class="kw">DESC</span> <span class="kw">LIMIT</span> <span class="st">4</span>;
+
+<span class="hr"> title                          | plays | compl </span>
+<span class="hr">--------------------------------+-------+-------</span>
+ Shawshank Redemption, The      |  1842 |  0.91
+ Pulp Fiction                   |  1730 |  0.86
+ Forrest Gump                   |  1689 |  0.88
+ Matrix, The                    |  1604 |  0.90
+<span class="cm">(4 rows · 0.18s · snapshot 5 · scanned 12 files)</span></div>
+    </div>
+    <div class="engines">
+      <span class="e"><b>Spark</b> structured writes + dbt</span>
+      <span class="e"><b>Trino</b> interactive reads</span>
+      <span class="e"><b>Iceberg REST</b> catalog</span>
+      <span class="e"><b>MinIO</b> S3 storage</span>
+      <span class="e"><b>Great Expectations</b> validation</span>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- COLOPHON -->
+<footer class="colophon">
+  <div class="wrap">
+    <h2>Bring up the whole lakehouse with one command.</h2>
+    <p class="ctext">Docker-composed end to end: MinIO, the Iceberg REST catalog, Spark, and Trino — seeded with real MovieLens data and seven days of synthetic playback events.</p>
+    <div class="runbox">
+      <div class="rl"><span class="pmt">$</span> make up <span class="cm">MinIO + Iceberg REST + Spark + Trino</span></div>
+      <div class="rl"><span class="pmt">$</span> make seed &amp;&amp; make ingest <span class="cm">load bronze</span></div>
+      <div class="rl"><span class="pmt">$</span> make build &amp;&amp; make test <span class="cm">silver + gold, validated</span></div>
+      <div class="rl"><span class="pmt">$</span> make demo <span class="cm">run the 5 Iceberg demos</span></div>
+    </div>
+    <div class="colo-cta">
+      <a class="btn btn-fill" href="https://github.com/jabrunin001/iceberg-lakehouse-lab" target="_blank" rel="noopener">View source on GitHub</a>
+      <a class="btn btn-out" href="#travel">Back to time travel</a>
+    </div>
+    <div class="foot">
+      <span>Iceberg Lakehouse Lab</span>
+      <a class="gh" href="https://github.com/jabrunin001/iceberg-lakehouse-lab" target="_blank" rel="noopener" style="color:var(--ink-2)">github.com/jabrunin001/iceberg-lakehouse-lab →</a>
+      <span class="note">Sample demo. The snapshot history below §02 is illustrative; the Iceberg features, dbt models, and validation suites are real and shipped in this repository.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+
+  // Snapshot history for gold.movie_engagement (oldest → newest)
+  var SNAPS = [
+    { id:0, ts:"2024-03-01 09:00", op:"Initial bronze load", kind:"append",
+      rows:9742, schema:1, cols:4, files:28,
+      note:"MovieLens movies and ratings ingested. The dimension grain is set." },
+    { id:1, ts:"2024-03-03 02:10", op:"Append playback events", kind:"append",
+      rows:24318, schema:1, cols:4, files:96,
+      note:"Seven days of synthetic playback events appended. Many small files — note the count." },
+    { id:2, ts:"2024-03-04 02:10", op:"Silver dedup rebuild", kind:"overwrite",
+      rows:24290, schema:1, cols:4, files:64,
+      note:"dbt overwrites the mart after deduplicating on the natural key. 28 duplicate rows gone." },
+    { id:3, ts:"2024-03-05 11:32", op:"Add completion_rate", kind:"schema",
+      rows:24290, schema:2, cols:5, files:64,
+      note:"A column added by metadata only. Not one data file was rewritten — older snapshots keep schema v1." },
+    { id:4, ts:"2024-03-07 02:10", op:"Append playback day", kind:"append",
+      rows:27104, schema:2, cols:5, files:88,
+      note:"Another incremental day lands. The table keeps growing; history keeps every prior state." },
+    { id:5, ts:"2024-03-08 04:00", op:"Compaction + expire", kind:"compact",
+      rows:27104, schema:2, cols:5, files:12,
+      note:"Maintenance rewrites 88 small files into 12 large ones. Same data, far cheaper scans." }
+  ];
+  var KIND_LABEL = { append:"append", overwrite:"overwrite", schema:"schema evolve", compact:"compaction" };
+  var KIND_CLASS = { append:"append", overwrite:"overwrite", schema:"schema", compact:"compact" };
+
+  // preview rows; completion only meaningful once schema v2
+  var ROWS = [
+    { t:"Shawshank Redemption, The", plays:1842, compl:0.91 },
+    { t:"Pulp Fiction",              plays:1730, compl:0.86 },
+    { t:"Forrest Gump",              plays:1689, compl:0.88 },
+    { t:"Matrix, The",               plays:1604, compl:0.90 }
+  ];
+
+  var head = SNAPS.length - 1;   // current live table pointer
+  var viewing = head;            // snapshot being viewed
+
+  function fmt(n){ return n.toLocaleString("en-US"); }
+
+  function buildRail(){
+    var rail = $("rail");
+    rail.innerHTML = "";
+    // newest first
+    for(var i = SNAPS.length - 1; i >= 0; i--){
+      (function(s){
+        var btn = document.createElement("button");
+        btn.className = "snap" + (s.id === head ? " is-head" : "");
+        btn.setAttribute("aria-current", String(s.id === viewing));
+        btn.innerHTML =
+          '<span class="marker"><span class="ln"></span><span class="dot"></span></span>'+
+          '<span class="sx">'+
+            '<span class="op">'+s.op+'<span class="tag '+KIND_CLASS[s.kind]+'">'+KIND_LABEL[s.kind]+'</span></span>'+
+            '<span class="sid">snapshot '+s.id+' · '+s.ts+'</span>'+
+            (s.id === head ? '<span class="headflag">● current HEAD</span>' : '')+
+          '</span>';
+        btn.addEventListener("click", function(){ viewing = s.id; render(); });
+        rail.appendChild(btn);
+      })(SNAPS[i]);
+    }
+  }
+
+  function flash(el){
+    if(window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    el.classList.add("flash"); setTimeout(function(){ el.classList.remove("flash"); }, 260);
+  }
+
+  function render(){
+    var s = SNAPS[viewing];
+    var isHead = viewing === head;
+    var travel = !isHead;
+
+    // as-of banner
+    var asof = $("asof");
+    asof.classList.toggle("travel", travel);
+    $("asof-txt").textContent = travel
+      ? "TIME-TRAVEL — reading snapshot " + s.id + " as of " + s.ts + " (read-only)"
+      : "Viewing HEAD — the current table (snapshot " + s.id + ")";
+
+    // stats
+    $("st-rows").textContent = fmt(s.rows); flash($("st-rows"));
+    $("st-schema").innerHTML = "v" + s.schema + ' <span class="d">/ ' + s.cols + " cols</span>"; flash($("st-schema"));
+    $("st-files").textContent = fmt(s.files); flash($("st-files"));
+    $("st-note").textContent = s.note;
+
+    // preview header
+    var v2 = s.schema >= 2;
+    var thead = $("prev-head");
+    thead.innerHTML = "<tr><th>movie_id</th><th>title</th><th>plays</th>" +
+      (v2 ? '<th class="new">completion_rate</th>' : "") + "</tr>";
+    var tbody = $("prev-body");
+    tbody.innerHTML = "";
+    ROWS.forEach(function(r, i){
+      // plays scale a touch with snapshot so the table visibly differs over time
+      var scale = 0.62 + (s.id * 0.076);
+      var plays = Math.round(r.plays * scale);
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>"+(i+1)+"</td><td class='t'>"+r.t+"</td><td>"+fmt(plays)+"</td>" +
+        (v2 ? '<td class="new">'+r.compl.toFixed(2)+'</td>' : "");
+      tbody.appendChild(tr);
+    });
+    $("prev-cap").textContent = "preview · gold.movie_engagement" + (travel ? "  FOR VERSION AS OF " + s.id : "");
+
+    // controls
+    var rb = $("rollback");
+    rb.disabled = isHead;
+    rb.style.opacity = isHead ? ".4" : "1";
+    rb.style.cursor = isHead ? "not-allowed" : "pointer";
+    $("ctl-hint").textContent = isHead
+      ? "You are on the live table — nothing to roll back to."
+      : "Rolling back makes snapshot " + s.id + " the new HEAD and discards " + (head - s.id) + " later snapshot(s).";
+
+    buildRail();
+  }
+
+  $("rollback").addEventListener("click", function(){
+    if(viewing === head) return;
+    head = viewing;
+    // discard snapshots after the new head
+    SNAPS.length = head + 1;
+    render();
+    $("ctl-hint").textContent = "Rolled back. Snapshot " + head + " is now HEAD — one metadata commit, no data copied.";
+  });
+
+  $("latest").addEventListener("click", function(){
+    viewing = head; render();
+  });
+
+  // init
+  render();
+})();
+</script>
+</body>
+</html>
